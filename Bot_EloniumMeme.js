@@ -2,6 +2,7 @@ import { createRequire } from 'module'
 import axios from 'axios'
 const require = createRequire(import.meta.url)
 const TelegramBot = require('node-telegram-bot-api')
+const Jimp = require('jimp');
 const dotenv = require('dotenv')
 
 const userMessageTime = new Map()
@@ -17,8 +18,8 @@ async function createPrediction (text) {
       // Pinned to a specific version of Stable Diffusion
       // See https://replicate.com/stability-ai/stable-diffussion/versions
       version:
-        '436b051ebd8f68d23e83d22de5e198e0995357afef113768c20f0b6fcef23c8b', //stable-diffussion
-      input: { prompt: 'ElonMusk is ' + text + ", anime style"}
+        '9936c2001faa2194a261c01381f90e65261879985476014a0a37a334593a05eb', //stable-diffussion
+      input: { prompt: text + ', Elon Musk himself, funny meme, one face only, anime style, close up, concept art, intricate details, highly detailed'}
     },
     {
       headers: {
@@ -47,9 +48,7 @@ async function getPredictionStatus (id) {
   console.log(response)
   return prediction
 }
-
 const sleep = ms => new Promise(r => setTimeout(r, ms))
-
 const pending = async (sentMessage, chatId, username) => {
   let index = 59
   while (index > 0) {
@@ -68,7 +67,6 @@ const pending = async (sentMessage, chatId, username) => {
     )
   }
 }
-
 bot.onText(/\/elonium (.+)/, async (msg, match) => {
   const chatId = msg.chat.id
   const username = msg.from.username
@@ -93,7 +91,6 @@ bot.onText(/\/elonium (.+)/, async (msg, match) => {
       return
     }
   }
-
   // Update the last message time for this user
   userMessageTime.set(chatId, now)
   bot.sendMessage(
@@ -118,7 +115,16 @@ bot.onText(/\/elonium (.+)/, async (msg, match) => {
     }
   }
   if (response.output) {
-    bot.sendPhoto(chatId, response.output[response.output.length - 1], {
+    const imageUrl = response.output[0];
+    const photo = await Jimp.read(imageUrl);
+    // Download the image
+    const watermark = await Jimp.read('./logo.png');
+    const x = photo.bitmap.width - watermark.bitmap.width - 10;
+    const y = photo.bitmap.height - watermark.bitmap.height - 10;
+    // Add the watermark to the photo
+    photo.composite(watermark, x, y);
+    const photoBuffer = await photo.getBufferAsync(Jimp.MIME_JPEG);
+    bot.sendPhoto(chatId, photoBuffer, {
       caption: 'Generated for @' + username + ': ' + match[1],
       reply_to_message_id: msg.message_id
     })
@@ -127,9 +133,7 @@ bot.onText(/\/elonium (.+)/, async (msg, match) => {
     bot.sendMessage(chatId, 'Sorry. could you again please.');
   }
 })
-
 if(bot.isPolling()) {
   await bot.stopPolling();
 }
-
 await bot.startPolling();
